@@ -7,7 +7,7 @@ import feedparser
 
 st.set_page_config(page_title="FM Stock Scout Pro", layout="wide")
 
-# 화이트/라이트 스타일
+# 화이트/라이트 테마 스타일
 st.markdown(
     """
     <style>
@@ -30,7 +30,7 @@ st.markdown(
 st.title("⚽ FM 정밀 스카우터 Pro: 펀더멘털 & 뉴스 촉매 통합")
 st.caption("기업의 재무 포텐셜(CA/PA)과 최신 24시간 실시간 뉴스 호재(Catalyst)를 동시에 분석합니다.")
 
-# 사이드바 설정 - 뉴스 호재 급등주 메뉴를 1순위로 추가
+# 사이드바 설정
 st.sidebar.header("📡 스카우트 전략 선택")
 market_choice = st.sidebar.selectbox(
     "스카우트 전략 프리셋",
@@ -48,22 +48,21 @@ max_scan_limit = st.sidebar.slider("스카우트 대상 수량", min_value=10, m
 def clamp(val, min_val=1, max_val=200):
     return int(max(min_val, min(val, max_val)))
 
-# 1. 트레이딩뷰 종목 수집 엔진
+# 1. 트레이딩뷰 종목 수집 엔진 (오류 수정 완료)
 def fetch_tradingview_tickers(choice, limit):
     try:
         if choice == "🔥 오늘 실시간 뉴스 호재/급등 촉매주 (거래량 폭발+상승)":
-            # 당일 거래량이 평소의 1.8배 이상 터지면서 주가가 상승 중인 뉴스 모멘텀 종목군
             q = (
                 Query()
                 .set_markets('america')
-                .select('name', 'close', 'change', 'volume', 'average_volume_10d_calc', 'market_cap_basic')
+                .select('name', 'close', 'change', 'volume', 'relative_volume_10d_calc', 'market_cap_basic')
                 .where(Column('type') == 'stock')
                 .where(Column('exchange').isin(['NASDAQ', 'NYSE']))
-                .where(Column('close') >= 5.0)                       # 페니주 차단 ($5 이상)
+                .where(Column('close') >= 5.0)                       # 페니주 제외 ($5 이상)
                 .where(Column('market_cap_basic') >= 500_000_000)   # 시총 5억 달러 이상
-                .where(Column('change') >= 2.0)                     # 당일 주가 상승 중
-                .where(Column('volume') > Column('average_volume_10d_calc') * 1.5) # 거래량 급증
-                .order_by('volume', ascending=False)
+                .where(Column('change') >= 2.0)                     # 당일 주가 +2% 이상 상승
+                .where(Column('relative_volume_10d_calc') >= 1.5)   # 평소 거래량 대비 1.5배 이상 폭발
+                .order_by('relative_volume_10d_calc', ascending=False)
                 .limit(limit)
             )
             df = q.get_scanner_data()[1]
