@@ -1,149 +1,143 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import plotly.graph_objects as go
 from tradingview_screener import Query, Column
 import feedparser
 from datetime import datetime, timezone, timedelta
 import re
 
-st.set_page_config(page_title="Market Catalyst Pro - 실시간 호재 레이더", layout="wide")
+st.set_page_config(page_title="실시간 뉴스 호재", layout="wide")
 
-# 스타일 시트
+# CSS 스타일링: 카드 디자인 및 가독성 극대화
 st.markdown(
     """
     <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
     
-    .catalyst-card {
+    .news-card {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
         padding: 16px 20px;
-        margin-bottom: 12px;
+        margin-bottom: 16px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s ease-in-out;
+    }
+    .news-card:hover {
+        border-color: #3b82f6;
+        box-shadow: 0 8px 14px -2px rgba(59, 130, 246, 0.12);
     }
     
-    .badge {
-        display: inline-block;
+    /* 1열 메타 태그 라인 */
+    .meta-line {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    
+    .badge-ticker {
+        background-color: #0f172a;
+        color: #ffffff;
+        font-weight: 800;
         padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+    .badge-cat {
+        background-color: #dbeafe;
+        color: #1d4ed8;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+    }
+    .badge-time {
+        background-color: #fef3c7;
+        color: #b45309;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+    }
+    .badge-scout {
+        background-color: #f1f5f9;
+        color: #334155;
         font-size: 12px;
         font-weight: 700;
+        padding: 4px 10px;
         border-radius: 6px;
-        margin-right: 6px;
+        border: 1px solid #cbd5e1;
     }
-    .badge-ticker { background-color: #0f172a; color: #ffffff; font-size: 13px; }
-    .badge-cat { background-color: #dbeafe; color: #1d4ed8; }
-    .badge-time { background-color: #fef3c7; color: #b45309; }
-    .badge-effect { background-color: #dcfce7; color: #15803d; }
     
-    .tooltip-container {
-        position: relative;
-        display: inline-block;
-        cursor: pointer;
+    /* 별점 스타일 */
+    .star-badge {
+        background-color: #fffbeb;
+        border: 1px solid #fde68a;
+        color: #b45309;
+        font-weight: 800;
+        font-size: 13px;
+        padding: 3px 8px;
+        border-radius: 6px;
+        margin-left: auto;
     }
-    .tooltip-container .tooltip-card {
-        visibility: hidden;
-        width: 250px;
-        background-color: #0f172a;
-        color: #f8fafc;
-        border-radius: 8px;
-        padding: 10px 14px;
-        position: absolute;
-        z-index: 100;
-        bottom: 125%;
-        left: 50%;
-        transform: translateX(-50%);
-        opacity: 0;
-        transition: opacity 0.2s;
-        font-size: 12px;
+    
+    /* 2열 뉴스 및 요약 */
+    .news-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: #1e293b;
+        margin-bottom: 8px;
+    }
+    .summary-box {
+        background-color: #f8fafc;
+        border-left: 3px solid #3b82f6;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-size: 13px;
+        color: #334155;
         line-height: 1.6;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-    }
-    .tooltip-container .tooltip-card::after {
-        content: "";
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        margin-left: -5px;
-        border-width: 5px;
-        border-style: solid;
-        border-color: #0f172a transparent transparent transparent;
-    }
-    .tooltip-container:hover .tooltip-card {
-        visibility: visible;
-        opacity: 1;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("🔥 오늘의 실시간 호재 촉매 레이더")
-st.caption("가장 최근에 보도된 실시간 기사 순으로 정렬됩니다. (종목명에 마우스를 올리면 잠재력 스탯이 뜹니다)")
+st.title("🔥 실시간 뉴스 호재")
+st.caption("실시간 수집된 호재 뉴스순으로 자동 갱신됩니다. (시장 영향도 및 종목 잠재력 즉시 제공)")
 
-st.sidebar.header("📡 스카우트 설정")
-market_choice = st.sidebar.selectbox(
-    "스카우트 전략 프리셋",
-    [
-        "🔥 오늘 실시간 뉴스 호재/급등 촉매주",
-        "🌟 알짜 원더키드 발굴 (고성장 가치주)",
-        "🚀 테크/AI 슈퍼 성장주 (이익 폭발형)",
-        "🛡️ 완성형 우량 대형주"
-    ]
-)
-scan_limit = st.sidebar.slider("스캔 종목 수", min_value=10, max_value=30, value=15, step=5)
+# 사이드바 설정 (잡다한 목록 삭제, 단일 실시간 감시 특화)
+st.sidebar.header("⚙️ 실시간 레이더 설정")
+scan_limit = st.sidebar.slider("스캔 종목 수", min_value=10, max_value=40, value=20, step=5)
+auto_refresh = st.sidebar.toggle("⚡ 60초 자동 실시간 갱신", value=True)
 
 def clamp(val, min_val=1, max_val=200):
     return int(max(min_val, min(val, max_val)))
 
-def fetch_tradingview_tickers(choice, limit):
+# 트레이딩뷰에서 현재 거래량과 주가 변동이 감지되는 실시간 후보군 추출
+def fetch_active_tickers(limit):
     try:
-        if choice == "🔥 오늘 실시간 뉴스 호재/급등 촉매주":
-            q = (
-                Query()
-                .set_markets('america')
-                .select('name', 'close', 'change', 'volume', 'market_cap_basic')
-                .where(Column('type') == 'stock')
-                .where(Column('exchange').isin(['NASDAQ', 'NYSE']))
-                .where(Column('close') >= 2.0)
-                .where(Column('market_cap_basic') >= 200_000_000)
-                .where(Column('change') >= 1.0)
-                .order_by('volume', ascending=False)
-                .limit(limit)
-            )
-            df = q.get_scanner_data()[1]
-            return [t for t in df['name'].tolist() if not t.endswith(('P', 'M', 'N', 'WS'))]
-        elif choice == "🌟 알짜 원더키드 발굴 (고성장 가치주)":
-            q = (
-                Query()
-                .set_markets('america')
-                .select('name', 'close', 'total_revenue_growth_fq', 'market_cap_basic')
-                .where(Column('type') == 'stock')
-                .where(Column('exchange').isin(['NASDAQ', 'NYSE']))
-                .where(Column('total_revenue_growth_fq') >= 15.0)
-                .order_by('total_revenue_growth_fq', ascending=False)
-                .limit(limit)
-            )
-            df = q.get_scanner_data()[1]
-            return df['name'].tolist()
-        else:
-            q = (
-                Query()
-                .set_markets('america')
-                .select('name', 'market_cap_basic')
-                .where(Column('type') == 'stock')
-                .where(Column('exchange').isin(['NASDAQ', 'NYSE']))
-                .order_by('market_cap_basic', ascending=False)
-                .limit(limit)
-            )
-            df = q.get_scanner_data()[1]
-            return df['name'].tolist()
+        q = (
+            Query()
+            .set_markets('america')
+            .select('name', 'close', 'change', 'volume', 'market_cap_basic')
+            .where(Column('type') == 'stock')
+            .where(Column('exchange').isin(['NASDAQ', 'NYSE']))
+            .where(Column('close') >= 2.0)
+            .where(Column('market_cap_basic') >= 200_000_000)
+            .where(Column('change') >= 1.0)
+            .order_by('volume', ascending=False)
+            .limit(limit)
+        )
+        df = q.get_scanner_data()[1]
+        return [t for t in df['name'].tolist() if not t.endswith(('P', 'M', 'N', 'WS'))]
     except Exception:
-        return ["NVDA", "TSLA", "PLTR", "AMD", "LLY", "AAPL", "MSFT"]
+        return ["NVDA", "TSLA", "PLTR", "AMD", "LLY", "AAPL", "MSFT", "AMZN"]
 
-ticker_list = fetch_tradingview_tickers(market_choice, scan_limit)
-
+# 펀더멘털 CA/PA 잠재력 프로필 계산
 @st.cache_data(ttl=1800)
 def get_stock_profile(ticker):
     try:
@@ -167,46 +161,114 @@ def get_stock_profile(ticker):
             "ca": ca,
             "pa": pa,
             "gap": gap,
-            "eta": "약 3~6개월 (단기 상승)" if gap >= 20 else "현재 전성기 (Peak)",
-            "verdict": "🌟 알짜 유망주" if gap >= 20 else "🛡️ 안정형 우량주",
-            "stats": {
-                "수익성": clamp(roe * 500 + 50),
-                "영업이익률": clamp(op_margin * 500 + 50),
-                "매출성장": clamp(rev_growth * 400 + 70),
-                "이익성장": clamp(earn_growth * 400 + 70),
-                "현재 능력치": ca,
-                "잠재력 한계": pa
-            }
+            "eta": "약 3~6개월" if gap >= 20 else "전성기 도달",
+            "verdict": "🌟 알짜 유망주" if gap >= 20 else "🛡️ 안정 우량주"
         }
     except Exception:
         return {
-            "name": ticker, "ca": 100, "pa": 120, "gap": 20,
-            "eta": "분석 대기", "verdict": "모니터링 대상",
-            "stats": {"수익성": 100, "영업이익률": 100, "매출성장": 100, "이익성장": 100, "현재 능력치": 100, "잠재력 한계": 120}
+            "name": ticker, "ca": 105, "pa": 125, "gap": 20,
+            "eta": "약 6~12개월", "verdict": "분석 대기"
         }
 
-def summarize_to_korean(title):
+# 호재 분류, 별점(1~10), 2~3줄 요약 생성 함수
+def analyze_news_detail(title):
     t_lower = title.lower()
-    if any(k in t_lower for k in ["acquisition", "acquires", "acquire", "merger"]):
-        m = re.search(r"to acquire (.+)", title, re.IGNORECASE)
-        target = m.group(1) if m else "기업"
-        return f"🤝 대규모 인수합병(M&A) 단행: {target[:25]} 지분 인수 체결", "인수합병 (M&A)"
-    elif any(k in t_lower for k in ["partnership", "partner", "collaborat"]):
-        return "🤝 전략적 사업 파트너십 체결 및 시장 공동 확장", "전략적 파트너십"
-    elif any(k in t_lower for k in ["contract", "secures", "awarded", "order"]):
-        return "💰 대규모 공급 수주 계약 체결 (실적 직결)", "대형 수주/계약"
-    elif any(k in t_lower for k in ["fda", "approval", "cleared", "trial", "phase"]):
-        return "🧬 신약/의료기기 규제 당국 승인 및 임상 통과", "FDA/신약 승인"
-    elif any(k in t_lower for k in ["earnings", "revenue", "quarter", "results", "guidance"]):
-        if any(k in t_lower for k in ["record", "beat", "strong", "jump", "surge", "raises"]):
-            return "📈 시장 전망치 상회 어닝 서프라이즈 및 가이던스 상향", "실적 호재"
-        return "📊 분기 실적 발표 및 주요 경영 성과 공시", "실적 발표"
-    elif any(k in t_lower for k in ["ai", "nvidia", "chip", "patent"]):
-        return "🤖 차세대 AI 인프라 도입 및 핵심 기술 특허 확보", "AI/신기술 확보"
-    else:
-        return f"📢 주요 비즈니스 및 시장 동향 업데이트", "비즈니스 뉴스"
+    
+    # 기본값
+    category = "비즈니스 소식"
+    stars = 5
+    title_kor = title
+    summary_lines = [
+        "• 기업의 주요 사업 공시 및 시장 거래 동향이 보도되었습니다.",
+        "• 단기 변동성보다는 중장기 펀더멘털 관점의 시장 흐름입니다."
+    ]
 
-def fetch_top_catalysts(tickers):
+    # 1. FDA / 임상 / 바이오 호재 (별 8~10점)
+    if any(k in t_lower for k in ["fda approval", "fda approves", "cleared by fda", "breakthrough"]):
+        category = "🧬 FDA 최종 승인"
+        stars = 10
+        title_kor = f"미국 FDA 신약/의료기기 시판 허가 승인 통과"
+        summary_lines = [
+            "• 규제 당국의 최종 판매 및 상용화 승인을 획득하여 신규 매출이 본격화됩니다.",
+            "• 바이오/헬스케어 섹터 내 최고 수준의 급등 모멘텀 촉매로 평가됩니다.",
+            "• 시세 영향: 당일 프리마켓 및 정규장에서 강력한 매수세 유입 가능성이 높습니다."
+        ]
+    elif any(k in t_lower for k in ["clinical trial", "phase 3", "phase 2", "positive results"]):
+        category = "🧪 임상 시험 성공"
+        stars = 8
+        title_kor = "핵심 파이프라인 주요 임상 시험 유의미한 결과 발표"
+        summary_lines = [
+            "• 개발 중인 핵심 파이프라인이 임상 목표치를 충족하며 상용화 가능성을 높였습니다.",
+            "• 향후 신약 허가 신청 및 라이선스 아웃(기술 수출) 기대감이 반영됩니다.",
+            "• 시세 영향: 단기 기대감에 따른 급등 랠리가 촉발될 수 있습니다."
+        ]
+
+    # 2. 인수합병 (M&A) (별 8~9점)
+    elif any(k in t_lower for k in ["to acquire", "acquisition", "acquires", "merger agreement"]):
+        category = "🤝 대규모 인수합병(M&A)"
+        stars = 9
+        m = re.search(r"to acquire (.+)", title, re.IGNORECASE)
+        target = m.group(1) if m else "유망 기업"
+        title_kor = f"외형 성장 및 시너지 창출을 위한 [{target[:25]}] 지분 인수"
+        summary_lines = [
+            "• 공격적인 사업 다각화 및 점유율 확대를 위한 M&A 계약이 공식 체결되었습니다.",
+            "• 피인수 기업의 고객군과 특허 기술이 연결되어 즉각적인 실적 합산 효과가 기대됩니다.",
+            "• 시세 영향: 인수 규모와 조건에 따라 장단기 시세 흐름이 가파르게 반응합니다."
+        ]
+
+    # 3. 대형 수주 / 공급 계약 (별 7~9점)
+    elif any(k in t_lower for k in ["secures contract", "awarded contract", "supply agreement", "major order"]):
+        category = "💰 대형 공급/수주 계약"
+        stars = 8
+        title_kor = "대규모 제품/서비스 장기 공급 수주 계약 확정"
+        summary_lines = [
+            "• 글로벌 고객사 또는 정부 기관과의 대형 공급 수주가 공식화되었습니다.",
+            "• 향후 수개 분기 동안 안정적인 매출 파이프라인과 영업이익을 보장받게 됩니다.",
+            "• 시세 영향: 확실한 실적 기반의 기관 수급 유입이 기대되는 호재입니다."
+        ]
+
+    # 4. 전략적 파트너십 (별 6~8점)
+    elif any(k in t_lower for k in ["partnership", "partners with", "collaborates"]):
+        category = "🌐 전략적 파트너십"
+        stars = 7
+        title_kor = "업계 선두권 기업과 공동 사업 확장 파트너십 구축"
+        summary_lines = [
+            "• 빅테크 또는 글로벌 파트너사와 손잡고 차세대 솔루션 공동 개발에 착수합니다.",
+            "• 판로 확대 및 브랜드 신뢰도 상승에 따른 중장기적 프리미엄이 부여됩니다.",
+            "• 시세 영향: 단기 테마성 매수세 및 중기 가치 재평가가 동시에 발생합니다."
+        ]
+
+    # 5. 실적 호재 / 가이던스 상향 (별 7~9점)
+    elif any(k in t_lower for k in ["raises guidance", "beats earnings", "record revenue", "earnings surprise"]):
+        category = "📈 어닝 서프라이즈"
+        stars = 8
+        title_kor = "시장 예상치를 뛰어넘는 호실적 달성 및 연간 목표치 상향"
+        summary_lines = [
+            "• 최근 분기 매출과 주당순이익(EPS)이 월가 컨센서스를 대폭 웃돌았습니다.",
+            "• 경영진이 향후 실적 가이던스를 공격적으로 상향 조정하며 강한 자신감을 보였습니다.",
+            "• 시세 영향: 실적 장세에서 가장 정석적인 갭상승 및 추세 랠리를 유발합니다."
+        ]
+
+    # 6. AI 및 신기술 채택 (별 7~8점)
+    elif any(k in t_lower for k in ["ai", "nvidia", "patent", "breakthrough"]):
+        category = "🤖 AI/첨단 기술 혁신"
+        stars = 7
+        title_kor = "차세대 AI 기술 상용화 및 독점 특허권 취득"
+        summary_lines = [
+            "• 인공지능 인프라 결합 및 신기술 특허 취득으로 기술 장벽을 한층 높였습니다.",
+            "• 시장 주도 섹터(AI/반도체) 테마와 연계되어 높은 밸류에이션 프리미엄을 받습니다.",
+            "• 시세 영향: 모멘텀 수급 집중 시 가파른 단기 슈팅이 빈번하게 발생합니다."
+        ]
+
+    return category, stars, title_kor, summary_lines
+
+def star_render(stars):
+    # 별 1~10개 시각화
+    full = "★" * stars
+    empty = "☆" * (10 - stars)
+    return f"{full}{empty} ({stars}/10점)"
+
+def fetch_latest_catalysts(tickers):
     news_items = []
     now_kst = datetime.now(timezone(timedelta(hours=9)))
     
@@ -221,138 +283,79 @@ def fetch_top_catalysts(tickers):
                 dt_utc = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
                 dt_kst = dt_utc.astimezone(timezone(timedelta(hours=9)))
                 diff_hours = int((now_kst - dt_kst).total_seconds() // 3600)
+                diff_mins = int(((now_kst - dt_kst).total_seconds() % 3600) // 60)
                 timestamp_val = dt_kst.timestamp()
-                pub_str = f"{dt_kst.strftime('%m/%d %H:%M')} ({diff_hours}시간 전)"
                 
-                if diff_hours <= 8:
-                    effect_str = "⚡ 오늘 정규장 즉각 반영 중"
-                elif diff_hours <= 24:
-                    effect_str = "📈 단기 시세 추세 지속 반영"
+                if diff_hours == 0:
+                    time_ago = f"{diff_mins}분 전"
                 else:
-                    effect_str = "⏳ 기본 가치 선반영 단계"
+                    time_ago = f"{diff_hours}시간 전"
+                pub_str = f"{dt_kst.strftime('%m/%d %H:%M')} ({time_ago})"
             else:
                 timestamp_val = 0
                 pub_str = "최근 24시간 이내"
-                effect_str = "⚡ 시장 실시간 반영"
                 
-            kor_summary, category = summarize_to_korean(entry.title)
+            cat, stars, kor_title, summary_lines = analyze_news_detail(entry.title)
             
             news_items.append({
                 "ticker": t,
                 "timestamp": timestamp_val,
-                "category": category,
-                "summary": kor_summary,
-                "original_title": entry.title,
-                "link": entry.link,
                 "time": pub_str,
-                "effect": effect_str
+                "category": cat,
+                "stars": stars,
+                "title_kor": kor_title,
+                "summary": summary_lines,
+                "original_title": entry.title,
+                "link": entry.link
             })
         except Exception:
             continue
             
-    # 최신 뉴스(타임스탬프 큰 순) 기준 최상단 정렬
+    # 가장 최신 보도 뉴스 순으로 정렬
     news_items.sort(key=lambda x: x["timestamp"], reverse=True)
     return news_items
 
-with st.spinner("최신 호재 뉴스를 수집하고 시간순으로 정렬하는 중..."):
-    catalyst_list = fetch_top_catalysts(ticker_list)
-
-if catalyst_list:
-    st.markdown("### 🔔 오늘 장 최우선 주시 종목 리스트 (최신 뉴스순)")
+# 60초 주기 자동 리프레시 프래그먼트
+@st.fragment(run_every="60s" if auto_refresh else None)
+def render_news_feed():
+    tickers = fetch_active_tickers(scan_limit)
+    news_list = fetch_latest_catalysts(tickers)
     
-    for item in catalyst_list:
-        t = item["ticker"]
-        prof = get_stock_profile(t)
+    if news_list:
+        st.write(f"⏱️ **실시간 수집 현황:** 총 {len(news_list)}건의 호재 뉴스 감지 (최신순)")
         
-        # HTML 태그 깨짐을 방지하기 위해 공백 없는 단일 문자열로 조립
-        card_html = (
-            f'<div class="catalyst-card">'
-            f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">'
-            f'<div>'
-            f'<div class="tooltip-container">'
-            f'<span class="badge badge-ticker">🔍 {t} ({prof["name"][:10]})</span>'
-            f'<div class="tooltip-card">'
-            f'<b>📊 {t} 잠재력 스카우팅</b><br>'
-            f'• 현재 실력(CA): <b>{prof["ca"]}</b> / 200<br>'
-            f'• 잠재 능력(PA): <b>{prof["pa"]}</b> / 200<br>'
-            f'• 포텐 여유: <b>+{prof["gap"]}</b> Poten<br>'
-            f'• 도달 예상: {prof["eta"]}<br>'
-            f'• 스카우트: {prof["verdict"]}'
-            f'</div>'
-            f'</div>'
-            f'<span class="badge badge-cat">{item["category"]}</span>'
-            f'<span class="badge badge-time">🕒 {item["time"]}</span>'
-            f'</div>'
-            f'<div><span class="badge badge-effect">{item["effect"]}</span></div>'
-            f'</div>'
-            f'<div style="font-size:15px; font-weight:700; color:#0f172a; margin:8px 0;">'
-            f'{item["summary"]}'
-            f'</div>'
-            f'</div>'
-        )
-        st.markdown(card_html, unsafe_allow_html=True)
-        
-        with st.expander(f"📄 {t} 원문 헤드라인 및 세부 기사 링크"):
-            st.write(f"**영문 원문:** {item['original_title']}")
-            st.markdown(f"[🔗 야후 파이낸스 원문 기사 바로가기]({item['link']})")
-
-    st.divider()
-
-    tab1, tab2 = st.tabs(["📊 선택 종목 육각형 레이더 차트", "📋 전체 스카우팅 랭킹 표"])
-    
-    with tab1:
-        sel_ticker = st.selectbox("정밀 분석할 종목 선택:", options=[c["ticker"] for c in catalyst_list])
-        target_prof = get_stock_profile(sel_ticker)
-        
-        col_c, col_d = st.columns([1, 1])
-        with col_c:
-            cats = list(target_prof["stats"].keys())
-            vals = list(target_prof["stats"].values())
+        for item in news_list:
+            t = item["ticker"]
+            prof = get_stock_profile(t)
             
-            fig = go.Figure()
-            fig.add_trace(go.Scatterpolar(
-                r=[target_prof["pa"]] * len(cats) + [target_prof["pa"]],
-                theta=cats + [cats[0]],
-                fill='toself', fillcolor='rgba(255, 179, 0, 0.08)',
-                line=dict(color='#FFA000', width=1.5, dash='dash'), name='잠재 한계치 (PA)'
-            ))
-            fig.add_trace(go.Scatterpolar(
-                r=vals + [vals[0]],
-                theta=cats + [cats[0]],
-                fill='toself', fillcolor='rgba(16, 185, 129, 0.35)',
-                line=dict(color='#059669', width=2.5), name='현재 능력'
-            ))
-            fig.update_layout(
-                polar=dict(
-                    bgcolor='#ffffff',
-                    radialaxis=dict(visible=True, range=[0, 200], tickvals=[50, 100, 150, 200], tickfont=dict(size=9)),
-                    angularaxis=dict(tickfont=dict(size=11, color="#1e293b"))
-                ),
-                paper_bgcolor='#ffffff',
-                margin=dict(l=30, r=30, t=10, b=30), height=350
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            # 1줄: 종목명 > 호재분류 > 시간 > 잠재력 스카우팅 및 별점
+            scout_text = f"CA {prof['ca']} / PA {prof['pa']} (+{prof['gap']} 포텐) | 도달: {prof['eta']}"
+            stars_text = star_render(item["stars"])
             
-        with col_d:
-            st.write(f"### {sel_ticker} 능력치 총평")
-            st.metric("현재 능력치 (CA)", f"{target_prof['ca']} / 200")
-            st.metric("잠재 능력치 (PA)", f"{target_prof['pa']} / 200", delta=f"+{target_prof['gap']} Poten")
-            st.info(f"**판정:** {target_prof['verdict']} | **예상 시점:** {target_prof['eta']}")
+            card_html = f"""
+            <div class="news-card">
+                <div class="meta-line">
+                    <span class="badge-ticker">🔍 {t} ({prof['name'][:12]})</span>
+                    <span class="badge-cat">{item['category']}</span>
+                    <span class="badge-time">🕒 {item['time']}</span>
+                    <span class="badge-scout">📊 잠재력 스카우팅: {scout_text}</span>
+                    <span class="star-badge">{stars_text}</span>
+                </div>
+                <div class="news-title">
+                    📢 {item['title_kor']}
+                </div>
+                <div class="summary-box">
+                    {'<br>'.join(item['summary'])}
+                </div>
+            </div>
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
+            
+            with st.expander(f"📄 [{t}] 영문 원문 기사 및 링크 확인"):
+                st.write(f"**헤드라인:** {item['original_title']}")
+                st.markdown(f"[🔗 야후 파이낸스 기사 전문 열기]({item['link']})")
+    else:
+        st.info("현재 수집된 신규 호재 뉴스가 없습니다. 잠시 후 자동으로 다시 시도합니다.")
 
-    with tab2:
-        table_rows = []
-        for c in catalyst_list:
-            p = get_stock_profile(c["ticker"])
-            table_rows.append({
-                "티커": c["ticker"],
-                "기업명": p["name"],
-                "호재 분류": c["category"],
-                "보도 일시": c["time"],
-                "CA": p["ca"],
-                "PA": p["pa"],
-                "포텐": f"+{p['gap']}",
-                "적용 타이밍": c["effect"]
-            })
-        st.dataframe(pd.DataFrame(table_rows), use_container_width=True)
-else:
-    st.info("현재 수집된 실시간 촉매 뉴스가 없습니다. 잠시 후 새로고침해 주세요.")
+# 렌더링 호출
+render_news_feed()
