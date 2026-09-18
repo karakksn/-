@@ -3,9 +3,11 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 from tradingview_screener import Query, Column
+import feedparser
 
-st.set_page_config(page_title="FM Stock Scout Pro - GARP Wonderkid", layout="wide")
+st.set_page_config(page_title="FM Stock Scout Pro", layout="wide")
 
+# 화이트/라이트 스타일
 st.markdown(
     """
     <style>
@@ -25,10 +27,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("⚽ FM 정밀 스카우터: 고포텐 알짜 유망주(GARP) 엔진")
-st.caption("실적이 고속 성장하면서도 거품이 끼지 않은 '원더키드(GARP)' 기업을 집중 발굴합니다.")
+st.title("⚽ FM 정밀 스카우터 Pro: 펀더멘털 & 뉴스 촉매 통합")
+st.caption("기업의 재무 포텐셜(CA/PA)과 최신 24시간 실시간 뉴스 호재(Catalyst)를 동시에 분석합니다.")
 
-# 사이드바
+# 사이드바 설정
 st.sidebar.header("📡 스카우트 전략 선택")
 market_choice = st.sidebar.selectbox(
     "스카우트 전략 프리셋",
@@ -36,16 +38,16 @@ market_choice = st.sidebar.selectbox(
         "🌟 알짜 원더키드 발굴 (매출성장 15%↑ / ROE 12%↑ / 고성장 가치주)",
         "🚀 테크/AI 슈퍼 성장주 (이익 폭발형)",
         "🛡️ 완성형 배당/우량 대형주",
-        "트레이딩뷰 관심종목 파일(.txt) 업로드"
+        "트레이딩뷰 관심종목 파일(.txt) 직접 업로드"
     ]
 )
 
-max_scan_limit = st.sidebar.slider("스카우트 대상 수량", min_value=15, max_value=60, value=30, step=5)
+max_scan_limit = st.sidebar.slider("스카우트 대상 수량", min_value=10, max_value=50, value=25, step=5)
 
 def clamp(val, min_val=1, max_val=200):
     return int(max(min_val, min(val, max_val)))
 
-# 트레이딩뷰 고포텐 알짜 종목 필터 함수
+# 1. 트레이딩뷰 종목 수집
 def fetch_tradingview_tickers(choice, limit):
     try:
         if choice == "🌟 알짜 원더키드 발굴 (매출성장 15%↑ / ROE 12%↑ / 고성장 가치주)":
@@ -55,12 +57,12 @@ def fetch_tradingview_tickers(choice, limit):
                 .select('name', 'close', 'total_revenue_growth_fq', 'return_on_equity_fq', 'debt_to_equity_fq', 'market_cap_basic', 'type', 'exchange')
                 .where(Column('type') == 'stock')
                 .where(Column('exchange').isin(['NASDAQ', 'NYSE']))
-                .where(Column('close') >= 10.0)                     # 주가 $10 이상 (완전한 정규주)
-                .where(Column('market_cap_basic') >= 2_000_000_000) # 시총 20억 달러(2.7조 원) 이상 탄탄한 기업
-                .where(Column('total_revenue_growth_fq') >= 15.0)   # 매출성장률 최소 +15% 이상
-                .where(Column('return_on_equity_fq') >= 12.0)       # ROE 최소 12% 이상 (고수익성)
-                .where(Column('debt_to_equity_fq') <= 120.0)        # 건전한 부채비율
-                .order_by('total_revenue_growth_fq', ascending=False) # 성장률 가장 가파른 순
+                .where(Column('close') >= 10.0)
+                .where(Column('market_cap_basic') >= 2_000_000_000)
+                .where(Column('total_revenue_growth_fq') >= 15.0)
+                .where(Column('return_on_equity_fq') >= 12.0)
+                .where(Column('debt_to_equity_fq') <= 120.0)
+                .order_by('total_revenue_growth_fq', ascending=False)
                 .limit(limit)
             )
             df = q.get_scanner_data()[1]
@@ -75,7 +77,7 @@ def fetch_tradingview_tickers(choice, limit):
                 .where(Column('exchange').isin(['NASDAQ', 'NYSE']))
                 .where(Column('close') >= 15.0)
                 .where(Column('market_cap_basic') >= 5_000_000_000)
-                .where(Column('earnings_per_share_diluted_growth_fq') >= 25.0) # EPS 성장 25% 이상
+                .where(Column('earnings_per_share_diluted_growth_fq') >= 25.0)
                 .order_by('earnings_per_share_diluted_growth_fq', ascending=False)
                 .limit(limit)
             )
@@ -98,7 +100,7 @@ def fetch_tradingview_tickers(choice, limit):
 
     except Exception as e:
         st.sidebar.error(f"트레이딩뷰 통신 오류: {e}")
-        return ["NVDA", "AVGO", "LLY", "TSM", "AAPL", "MSFT", "AMZN", "META"]
+        return ["NVDA", "AVGO", "LLY", "TSM", "AAPL", "MSFT", "AMZN"]
 
 if "파일" in market_choice:
     uploaded_file = st.sidebar.file_uploader("관심종목 (.txt)", type=["txt"])
@@ -113,7 +115,48 @@ else:
 
 st.sidebar.info(f"스카우팅 분석 대상: **{len(ticker_list)}개 기업**")
 
-# CA/PA 계산 엔진 (GARP 중심)
+# 2. 실시간 뉴스 호재/촉매 분석 함수
+CATALYST_MAP = {
+    "FDA 승인 / 바이오": ["fda approval", "fda approves", "cleared", "clinical trial"],
+    "대형 수주 / 파트너십": ["partnership", "secures contract", "awarded", "deal signed", "agreement"],
+    "실적 호재 / 가이던스 상향": ["raises guidance", "beats estimates", "record revenue", "strong earnings", "upgrade"],
+    "인수합병 / M&A": ["acquisition", "acquired", "merger", "takeover"],
+    "AI / 핵심 기술 채택": ["ai partnership", "nvidia partner", "patent granted", "breakthrough"]
+}
+
+def analyze_live_news(ticker):
+    try:
+        rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+        feed = feedparser.parse(rss_url)
+        if not feed.entries:
+            return {"score": 50, "catalysts": [], "headlines": ["최근 뉴스 없음"]}
+        
+        detected_catalysts = []
+        headlines = []
+        positive_words = ["surge", "jump", "growth", "profit", "gain", "bullish", "record", "beat", "buy"]
+        
+        pos_count = 0
+        for entry in feed.entries[:6]:
+            title = entry.title
+            headlines.append(title)
+            t_lower = title.lower()
+            
+            for cat, kws in CATALYST_MAP.items():
+                for kw in kws:
+                    if kw in t_lower and cat not in detected_catalysts:
+                        detected_catalysts.append(cat)
+                        
+            for pw in positive_words:
+                if pw in t_lower:
+                    pos_count += 1
+                    break
+
+        news_power = clamp(50 + (len(detected_catalysts) * 20) + (pos_count * 8))
+        return {"score": news_power, "catalysts": detected_catalysts, "headlines": headlines[:4]}
+    except:
+        return {"score": 50, "catalysts": [], "headlines": ["뉴스 수신 불가"]}
+
+# 3. 정밀 펀더멘털 CA/PA 엔진
 @st.cache_data(ttl=3600)
 def get_detailed_scout_data(ticker_symbol):
     try:
@@ -127,55 +170,37 @@ def get_detailed_scout_data(ticker_symbol):
             return None
             
         raw_target = info.get("targetMeanPrice", current_price) or current_price
-        target_price = min(raw_target, current_price * 1.8) # 비현실적 목표주가는 최대 80% 상승으로 캡
+        target_price = min(raw_target, current_price * 1.8)
         
         roe = info.get("returnOnEquity", 0.0) or 0.0
         op_margin = info.get("operatingMargins", 0.0) or 0.0
         debt_equity = info.get("debtToEquity", 100.0) or 100.0
-        pe_ratio = info.get("trailingPE", info.get("forwardPE", 28.0)) or 28.0
         rev_growth = info.get("revenueGrowth", 0.0) or 0.0
         earn_growth = info.get("earningsGrowth", 0.0) or 0.0
         peg = info.get("pegRatio", 2.0) or 2.0
         
-        # 1. 6대 핵심 스탯 산출 (1~200)
-        # (1) 수익 창출력 (ROE + 영업이익률)
         stat_profit = clamp(((roe / 0.20) * 80 + (op_margin / 0.25) * 80) / 2 + 30)
-        
-        # (2) 재무 안전성
         stat_stability = clamp(200 - (debt_equity * 0.7))
-        
-        # (3) 매출 폭발력
         stat_rev = clamp((rev_growth / 0.35) * 90 + 60)
-        
-        # (4) 이익 성장 가속도
         stat_earn = clamp((earn_growth / 0.35) * 90 + 60)
-        
-        # (5) 밸류에이션 매력도 (PEG 1.5 이하 우대)
         stat_valuation = clamp((2.5 - min(peg, 2.5)) * 60 + 50)
         
-        # (6) 목표주가 상승 여력
         upside = (target_price - current_price) / current_price
         stat_upside = clamp((upside / 0.35) * 80 + 70)
 
-        # 2. CA: 현재 이익 창출력과 재무 체력 (기초 체력)
         ca = clamp(stat_profit * 0.45 + stat_stability * 0.35 + stat_valuation * 0.20)
-
-        # 3. PA: 현재 체력에 고성장 동력 + 월가 상승 여력 결합
         growth_power = (stat_rev * 0.35) + (stat_earn * 0.40) + (stat_upside * 0.25)
         pa = clamp(ca * 0.45 + growth_power * 0.65)
-        if pa < ca:
-            pa = ca
+        if pa < ca: pa = ca
         
         gap = pa - ca
-
-        # 4. 포텐 도달 기간 산정
         comp_growth = max(0.05, (rev_growth * 0.4) + (earn_growth * 0.6))
+        
         if gap <= 5:
             reach_time_str = "현재 전성기 (Peak)"
             reach_phase = "만개 완료"
         else:
-            years = (gap / 35.0) / (comp_growth + 0.15)
-            months = int(years * 12)
+            months = int(((gap / 35.0) / (comp_growth + 0.15)) * 12)
             if months <= 8:
                 reach_time_str = f"약 {max(3, months)}개월 (초고속 도달)"
                 reach_phase = "🚀 폭발적 성장기"
@@ -186,15 +211,10 @@ def get_detailed_scout_data(ticker_symbol):
                 reach_time_str = f"약 {months // 12}년+ (중기)"
                 reach_phase = "⏳ 안정적 순항"
 
-        # 판정 등급 부여
-        if ca >= 130 and pa >= 175 and gap >= 20:
-            verdict = "🌟 S급 원더키드 (Elite Wonderkid)"
-        elif ca >= 140 and pa >= 165:
-            verdict = "🛡️ 완성형 최우량주 (Solid Elite)"
-        elif gap >= 30 and ca >= 100:
-            verdict = "💎 고성장 알짜주 (High Growth)"
-        else:
-            verdict = "⚖️ 안정 성장형 (Steady)"
+        if ca >= 130 and pa >= 175 and gap >= 20: verdict = "🌟 S급 원더키드"
+        elif ca >= 140 and pa >= 165: verdict = "🛡️ 완성형 최우량주"
+        elif gap >= 30 and ca >= 100: verdict = "💎 고성장 알짜주"
+        else: verdict = "⚖️ 안정 성장형"
 
         return {
             "티커": ticker_symbol,
@@ -208,31 +228,27 @@ def get_detailed_scout_data(ticker_symbol):
             "성장 페이즈": reach_phase,
             "스카우트 판정": verdict,
             "stats": {
-                "수익 창출력": stat_profit,
-                "재무 안전성": stat_stability,
-                "매출 성장성": stat_rev,
-                "이익 성장성": stat_earn,
-                "밸류 매력(PEG)": stat_valuation,
-                "상승 여력": stat_upside
+                "수익 창출력": stat_profit, "재무 안전성": stat_stability,
+                "매출 성장성": stat_rev, "이익 성장성": stat_earn,
+                "밸류 매력": stat_valuation, "상승 여력": stat_upside
             }
         }
-    except Exception:
+    except:
         return None
 
-# 데이터 수집 및 렌더링
+# 실행 및 데이터 수집
 if ticker_list:
-    progress = st.progress(0, text="알짜 유망주 스카우팅 분석 중...")
+    prog = st.progress(0, text="스카우트 데이터 분석 중...")
     reports = []
     total = len(ticker_list)
     for idx, t in enumerate(ticker_list):
         data = get_detailed_scout_data(t)
         if data:
             reports.append(data)
-        progress.progress((idx + 1) / total, text=f"검증 중: {t} ({idx+1}/{total})")
-    progress.empty()
+        prog.progress((idx + 1) / total, text=f"분석 중: {t} ({idx+1}/{total})")
+    prog.empty()
 
     if reports:
-        # PA 순 정렬
         df_board = pd.DataFrame(reports).sort_values(by="PA (잠재능력)", ascending=False).reset_index(drop=True)
 
         st.subheader(f"📋 고포텐 알짜 스카우팅 보드 (총 {len(df_board)}개)")
@@ -248,8 +264,8 @@ if ticker_list:
 
         st.divider()
 
-        # 개별 리포트
-        st.subheader("🔍 개별 기업 정밀 육각형 리포트")
+        # 개별 기업 상세 조회
+        st.subheader("🔍 개별 기업 정밀 리포트 & 실시간 뉴스 레이더")
         selected_ticker = st.selectbox(
             "분석할 기업 선택:",
             options=df_board["티커"].tolist(),
@@ -257,60 +273,57 @@ if ticker_list:
         )
 
         target = next(item for item in reports if item["티커"] == selected_ticker)
+        news_data = analyze_live_news(selected_ticker)
 
+        # 상단 요약 카드
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1: st.metric("기업명 (티커)", target["기업명"], delta=target["티커"])
         with c2: st.metric("현재 능력치 (CA)", f"{target['CA (현재능력)']} / 200")
         with c3: st.metric("잠재 능력치 (PA)", f"{target['PA (잠재능력)']} / 200", delta=f"+{target['포텐 여유']} Poten")
-        with c4: st.metric("현재가 (목표가)", target["현재가"], delta=f"목표: {target['목표가']}")
+        with c4: st.metric("뉴스 호재 파워", f"{news_data['score']} / 100", delta="실시간 수집")
         with c5: st.metric("도달 예상 시점", target["도달 예상 기간"], delta=target["성장 페이즈"])
 
-        st.success(f"**스카우트 판정:** {target['스카우트 판정']} | **페이즈:** {target['성장 페이즈']}")
-
-        chart_col, detail_col = st.columns([1.1, 0.9])
-        categories = list(target["stats"].keys())
-        values = list(target["stats"].values())
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatterpolar(
-            r=[target["PA (잠재능력)"]] * len(categories) + [target["PA (잠재능력)"]],
-            theta=categories + [categories[0]],
-            fill='toself',
-            fillcolor='rgba(255, 179, 0, 0.08)',
-            line=dict(color='#FFA000', width=1.5, dash='dash'),
-            name='잠재 한계치 (PA)'
-        ))
-        fig.add_trace(go.Scatterpolar(
-            r=values + [values[0]],
-            theta=categories + [categories[0]],
-            fill='toself',
-            fillcolor='rgba(16, 185, 129, 0.35)',
-            line=dict(color='#059669', width=2.5),
-            name='현재 세부 스탯'
-        ))
-
-        fig.update_layout(
-            polar=dict(
-                bgcolor='#ffffff',
-                radialaxis=dict(visible=True, range=[0, 200], tickvals=[50, 100, 150, 200], tickfont=dict(color="#718096", size=10), gridcolor="#e2e8f0"),
-                angularaxis=dict(tickfont=dict(color="#1e293b", size=11), gridcolor="#e2e8f0")
-            ),
-            paper_bgcolor='#ffffff',
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
-            margin=dict(l=40, r=40, t=20, b=40),
-            height=430
-        )
+        # 좌측: 육각형 레이더 차트 / 우측: 실시간 뉴스 호재 브리핑
+        chart_col, news_col = st.columns([1, 1])
 
         with chart_col:
+            st.markdown("##### 📊 FM 능력치 육각형")
+            categories = list(target["stats"].keys())
+            values = list(target["stats"].values())
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=[target["PA (잠재능력)"]] * len(categories) + [target["PA (잠재능력)"]],
+                theta=categories + [categories[0]],
+                fill='toself', fillcolor='rgba(255, 179, 0, 0.08)',
+                line=dict(color='#FFA000', width=1.5, dash='dash'), name='잠재 한계치 (PA)'
+            ))
+            fig.add_trace(go.Scatterpolar(
+                r=values + [values[0]],
+                theta=categories + [categories[0]],
+                fill='toself', fillcolor='rgba(16, 185, 129, 0.35)',
+                line=dict(color='#059669', width=2.5), name='현재 스탯'
+            ))
+            fig.update_layout(
+                polar=dict(
+                    bgcolor='#ffffff',
+                    radialaxis=dict(visible=True, range=[0, 200], tickvals=[50, 100, 150, 200], tickfont=dict(color="#718096", size=9), gridcolor="#e2e8f0"),
+                    angularaxis=dict(tickfont=dict(color="#1e293b", size=10), gridcolor="#e2e8f0")
+                ),
+                paper_bgcolor='#ffffff',
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                margin=dict(l=30, r=30, t=10, b=30), height=380
+            )
             st.plotly_chart(fig, use_container_width=True)
 
-        with detail_col:
-            st.markdown("##### 📊 6대 세부 포지션 스탯 (0~200)")
-            stats_df = pd.DataFrame({"스탯 항목": categories, "수치": values})
-            st.dataframe(
-                stats_df,
-                hide_index=True,
-                use_container_width=True,
-                column_config={"수치": st.column_config.ProgressColumn("점수", min_value=0, max_value=200, format="%d")}
-            )
+        with news_col:
+            st.markdown("##### 📰 실시간 뉴스 호재(Catalyst) 레이더")
+            if news_data["catalysts"]:
+                st.success(f"🔥 **포착된 핵심 호재:** {', '.join(news_data['catalysts'])}")
+            else:
+                st.info("ℹ️ 현재 감지된 특이 돌발 호재 없음 (일반 펀더멘털 흐름)")
+            
+            st.markdown("**최근 24시간 실시간 헤드라인:**")
+            for hl in news_data["headlines"]:
+                st.markdown(f"- 📄 {hl}")
