@@ -30,11 +30,12 @@ st.markdown(
 st.title("⚽ FM 정밀 스카우터 Pro: 펀더멘털 & 뉴스 촉매 통합")
 st.caption("기업의 재무 포텐셜(CA/PA)과 최신 24시간 실시간 뉴스 호재(Catalyst)를 동시에 분석합니다.")
 
-# 사이드바 설정
+# 사이드바 설정 - 뉴스 호재 급등주 메뉴를 1순위로 추가
 st.sidebar.header("📡 스카우트 전략 선택")
 market_choice = st.sidebar.selectbox(
     "스카우트 전략 프리셋",
     [
+        "🔥 오늘 실시간 뉴스 호재/급등 촉매주 (거래량 폭발+상승)",
         "🌟 알짜 원더키드 발굴 (매출성장 15%↑ / ROE 12%↑ / 고성장 가치주)",
         "🚀 테크/AI 슈퍼 성장주 (이익 폭발형)",
         "🛡️ 완성형 배당/우량 대형주",
@@ -47,10 +48,28 @@ max_scan_limit = st.sidebar.slider("스카우트 대상 수량", min_value=10, m
 def clamp(val, min_val=1, max_val=200):
     return int(max(min_val, min(val, max_val)))
 
-# 1. 트레이딩뷰 종목 수집
+# 1. 트레이딩뷰 종목 수집 엔진
 def fetch_tradingview_tickers(choice, limit):
     try:
-        if choice == "🌟 알짜 원더키드 발굴 (매출성장 15%↑ / ROE 12%↑ / 고성장 가치주)":
+        if choice == "🔥 오늘 실시간 뉴스 호재/급등 촉매주 (거래량 폭발+상승)":
+            # 당일 거래량이 평소의 1.8배 이상 터지면서 주가가 상승 중인 뉴스 모멘텀 종목군
+            q = (
+                Query()
+                .set_markets('america')
+                .select('name', 'close', 'change', 'volume', 'average_volume_10d_calc', 'market_cap_basic')
+                .where(Column('type') == 'stock')
+                .where(Column('exchange').isin(['NASDAQ', 'NYSE']))
+                .where(Column('close') >= 5.0)                       # 페니주 차단 ($5 이상)
+                .where(Column('market_cap_basic') >= 500_000_000)   # 시총 5억 달러 이상
+                .where(Column('change') >= 2.0)                     # 당일 주가 상승 중
+                .where(Column('volume') > Column('average_volume_10d_calc') * 1.5) # 거래량 급증
+                .order_by('volume', ascending=False)
+                .limit(limit)
+            )
+            df = q.get_scanner_data()[1]
+            return [t for t in df['name'].tolist() if not t.endswith(('P', 'M', 'N', 'WS'))]
+
+        elif choice == "🌟 알짜 원더키드 발굴 (매출성장 15%↑ / ROE 12%↑ / 고성장 가치주)":
             q = (
                 Query()
                 .set_markets('america')
@@ -100,7 +119,7 @@ def fetch_tradingview_tickers(choice, limit):
 
     except Exception as e:
         st.sidebar.error(f"트레이딩뷰 통신 오류: {e}")
-        return ["NVDA", "AVGO", "LLY", "TSM", "AAPL", "MSFT", "AMZN"]
+        return ["NVDA", "TSLA", "PLTR", "AMD", "LLY", "AAPL", "MSFT"]
 
 if "파일" in market_choice:
     uploaded_file = st.sidebar.file_uploader("관심종목 (.txt)", type=["txt"])
@@ -109,7 +128,7 @@ if "파일" in market_choice:
         raw_lines = [line.strip().split(":")[-1] for line in raw_text.splitlines() if line.strip()]
         ticker_list = [t for t in raw_lines if t.isalpha()]
     else:
-        ticker_list = ["NVDA", "AVGO", "LLY"]
+        ticker_list = ["NVDA", "TSLA", "PLTR"]
 else:
     ticker_list = fetch_tradingview_tickers(market_choice, max_scan_limit)
 
