@@ -5,9 +5,8 @@ from datetime import datetime, timezone, timedelta
 import re
 import html
 
-st.set_page_config(page_title="데일리 AI 주식 비서 - 실시간 브리핑", layout="wide")
+st.set_page_config(page_title="데일리 AI 주식 비서 - 24시간 실시간 브리핑", layout="wide")
 
-# 영상 속 브리핑 카드 스타일 CSS
 st.markdown(
     """
     <style>
@@ -16,15 +15,15 @@ st.markdown(
     .briefing-card {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 18px 22px;
-        margin-bottom: 16px;
+        border-radius: 14px;
+        padding: 20px 24px;
+        margin-bottom: 18px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         transition: all 0.2s ease-in-out;
     }
     .briefing-card:hover {
         border-color: #3b82f6;
-        box-shadow: 0 10px 16px -2px rgba(59, 130, 246, 0.12);
+        box-shadow: 0 10px 18px -2px rgba(59, 130, 246, 0.12);
     }
     
     .card-header {
@@ -32,8 +31,8 @@ st.markdown(
         align-items: center;
         flex-wrap: wrap;
         gap: 8px;
-        margin-bottom: 12px;
-        padding-bottom: 8px;
+        margin-bottom: 14px;
+        padding-bottom: 10px;
         border-bottom: 1px solid #f1f5f9;
     }
     
@@ -41,7 +40,7 @@ st.markdown(
         background-color: #0f172a;
         color: #ffffff;
         font-weight: 800;
-        padding: 4px 10px;
+        padding: 5px 12px;
         border-radius: 6px;
         font-size: 13px;
     }
@@ -49,7 +48,7 @@ st.markdown(
         background-color: #4338ca;
         color: #ffffff;
         font-weight: 800;
-        padding: 4px 10px;
+        padding: 5px 12px;
         border-radius: 6px;
         font-size: 13px;
     }
@@ -84,45 +83,46 @@ st.markdown(
         color: #b45309;
         font-weight: 800;
         font-size: 13px;
-        padding: 3px 8px;
+        padding: 4px 10px;
         border-radius: 6px;
         margin-left: auto;
     }
     
     .headline-text {
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 800;
+        color: #0f172a;
+        margin-bottom: 12px;
+    }
+    
+    .explain-box {
+        background-color: #f8fafc;
+        border-left: 4px solid #10b981;
+        padding: 14px 18px;
+        border-radius: 6px;
+        font-size: 14px;
+        line-height: 1.8;
         color: #1e293b;
         margin-bottom: 10px;
     }
     
-    .briefing-box {
-        background-color: #f8fafc;
-        border-left: 4px solid #10b981;
-        padding: 12px 16px;
-        border-radius: 6px;
-        font-size: 13.5px;
-        line-height: 1.7;
-        color: #1e293b;
-    }
-    
     .action-box {
-        margin-top: 8px;
         background-color: #eff6ff;
         border-left: 4px solid #3b82f6;
-        padding: 8px 14px;
+        padding: 10px 16px;
         border-radius: 6px;
-        font-size: 13px;
+        font-size: 13.5px;
         color: #1d4ed8;
         font-weight: 600;
+        line-height: 1.6;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("📱 데일리 AI 주식 비서: 실시간 브리핑")
-st.caption("유튜브 영상 속 AI 비서처럼 종목 뉴스 요약과 오늘의 체크포인트를 자동으로 정리해 드립니다.")
+st.title("📱 데일리 AI 주식 비서: 24시간 실시간 브리핑")
+st.caption("최근 24시간 이내의 핵심 뉴스를 어려운 주식용어 뒤에 쉬운 풀이(괄호 해설)를 달아 직관적으로 설명해 드립니다.")
 
 st.sidebar.header("⚙️ 비서 자동 갱신")
 auto_refresh = st.sidebar.toggle("⚡ 60초 주기 자동 브리핑", value=True)
@@ -171,120 +171,120 @@ def extract_ticker(title):
             return cand
     return None
 
-# 유튜브 비서 스타일 3단 브리핑 생성 엔진
-def make_executive_briefing(title, summary_raw):
+# 어려운 주식용어 뒤에 (쉬운 풀이)를 덧붙여주는 브리핑 생성 엔진
+def make_easy_story_briefing(title, summary_raw):
     clean_text = re.sub(r'<[^>]+>', '', summary_raw or '')
     clean_text = html.unescape(clean_text).strip()
     combo = (title + " " + clean_text).lower()
 
-    # 1. 비교/선별형 기사 (예: 1 Bank Stock Worth Investigating...)
-    if any(k in combo for k in ["worth investigating", "stocks to buy and", "we ignore", "avoid", "facing headwinds"]):
-        headline = "주목할 알짜 종목과 리스크 종목 선별 비교 분석"
-        lines = [
-            "• **핵심 팩트:** 차별화된 비이자 수수료 기반과 고수익성(ROE 30%+)을 갖춘 알짜주는 매력적이나, 전통 예대마진 의존도가 높은 지방 은행은 주의 권고.",
-            "• **실적/주가 영향:** 금리 변동성에 취약한 기업의 실적 둔화 우려가 부각되며, 탄탄한 펀더멘털을 보유한 1등주로 수급 쏠림 예상."
+    # 1. 비교/선별형 기사 (예: 1 Bank Stock Worth Investigating and 2 We Ignore)
+    if any(k in combo for k in ["worth investigating", "stocks to buy and", "we ignore", "avoid", "facing headwinds", "better buy"]):
+        headline = "🔍 알짜 유망주 vs 지금 피해야 할 종목 비교 분석"
+        explains = [
+            "• **무슨 일인가요?** 같은 업종 안에서도 돈을 잘 버는 똘똘한 1등 기업과, 겉만 멀쩡하고 위험한 종목을 가려낸 리포트(증권사 분석 보고서)가 나왔습니다.",
+            "• **쉽게 이해하기:** 단순 대출 이자만 받아서는 남는 게 별로 없습니다. 핀테크 수수료처럼 다른 곳에서 쏠쏠하게 돈을 잘 벌며 ROE(투자한 내 돈 대비 얼마나 순이익을 냈는지 보는 수익률)가 30%가 넘는 회사는 유망하지만, 금리가 흔들릴 때 NIM(순이자마진, 대출 이자에서 예금 이자를 뺀 순마진)이 줄어들며 타격을 입는 평범한 지방 은행들은 지금 피하는 게 안전합니다."
         ]
-        action = "💡 오늘 체크포인트: 포트폴리오 내 단순 금리 수혜주 비중 점검 및 안정적 고수익성 종목 위주 압축"
-        return "⚖️ 종목 선별", 8, headline, lines, action
+        action = "💡 오늘 이렇게 보세요: 내 계좌에 단순히 남들이 사서 따라 산 종목이 있는지 점검하고, 펀더멘털(기업의 기초 체력과 돈 버는 능력)이 튼튼한 알짜 회사 위주로 압축할 타이밍입니다."
+        return "⚖️ 종목 선별", 8, headline, explains, action
 
     # 2. FDA 승인
     if any(k in combo for k in ["fda approval", "fda approves", "cleared"]):
-        headline = "미국 FDA 신약/의료기기 최종 품목 허가 승인 통과"
-        lines = [
-            "• **핵심 팩트:** 규제 당국의 최종 판매 및 유통 승인을 획득하여 제품 상용화가 공식 시작되었습니다.",
-            "• **실적/주가 영향:** 개발 실패 리스크가 완전히 소멸되었으며, 병원 납품 시작과 함께 즉각적인 신규 매출이 발생합니다."
+        headline = "🎉 미국 정부(FDA) 공식 판매 허가 승인 통과!"
+        explains = [
+            "• **무슨 일인가요?** 까다롭기로 유명한 미국 FDA(식품의약국, 미국의 의약품 허가 기관)에서 신약이나 의료기기를 정식으로 판매해도 좋다는 최종 허가를 내줬습니다.",
+            "• **쉽게 이해하기:** 바이오 주식에서 가장 무서운 건 '약 개발 실패' 리스크(위험 요소)인데, 그 거대한 불확실성이 완전히 끝났습니다. 이제 병원과 약국에 깔리면서 회사 통장에 진짜 매출(제품을 팔아 번 돈)이 꽂히기 시작하므로 주가 상승 탄력이 매우 큽니다."
         ]
-        action = "💡 오늘 체크포인트: 당일 장초반 갭상승 후 기관 거래량 유입 및 애널리스트 목표주가 상향 리포트 주시"
-        return "🧬 FDA 최종승인", 10, headline, lines, action
+        action = "💡 오늘 이렇게 보세요: 장 시작하자마자 갭상승(전날 종가보다 훨씬 높게 시초가가 시작되는 현상)이 나타날 수 있습니다. 쫓아가며 급하게 사기보다는 기관(전문 투자 펀드)들의 수급(주식을 사 모으는 자금 유입)이 계속 이어지는지 지켜보세요."
+        return "🧬 FDA 판매승인", 10, headline, explains, action
 
     # 3. 임상 시험 성공
     if any(k in combo for k in ["clinical trial", "phase 3", "phase 2", "topline"]):
-        headline = "핵심 파이프라인 임상 시험 유의미한 효능 입증"
-        lines = [
-            "• **핵심 팩트:** 환자 대상 임상 단계에서 1차 평가지표를 달성하며 통계적 유의성을 입증했습니다.",
-            "• **실적/주가 영향:** 향후 글로벌 빅파마 대상 대규모 기술수출(L/O) 및 상용화 신약 가치 상승이 기대됩니다."
+        headline = "🧪 환자 대상 약효 시험 성공! 상용화 한 걸음 앞"
+        explains = [
+            "• **무슨 일인가요?** 개발 중인 신약을 실제 환자들에게 투여해 본 임상 시험(약의 안전성과 치료 효과를 실제 사람에게 검증하는 시험)에서 뚜렷한 약효가 확인되었습니다.",
+            "• **쉽게 이해하기:** 신약 시험은 도중에 엎어지는 경우가 태반인데, 큰 고비를 넘겼습니다. 다른 거대 글로벌 제약사들이 눈독을 들이며 기술을 비싼 값에 사가겠다고 손을 내미는 L/O(기술수출, 신약 기술을 다른 제약사에 로열티를 받고 파는 계약) 가능성이 아주 높아졌습니다."
         ]
-        action = "💡 오늘 체크포인트: 기술수출 협상 가능성 및 단기 급등 시 차익실현 매물 출회 여부 확인"
-        return "🧪 임상 성공", 8, headline, lines, action
+        action = "💡 오늘 이렇게 보세요: 기대감으로 단기 급등할 수 있습니다. 발표 직후 반짝 오르고 차익실현(이익을 보고 주식을 팔아 현금화하는 매물)이 쏟아질 수 있으니 다음 시험 일정이나 파트너십 소식을 함께 체크하세요."
+        return "🧪 임상 시험 성공", 8, headline, explains, action
 
     # 4. 인수합병 (M&A)
     if any(k in combo for k in ["acquire", "acquisition", "merger", "buyout"]):
         m = re.search(r"(?:to acquire|acquisition of)\s+([A-Za-z0-9\s,\.\-]+?)(?:for|\.|\band\b|$)", title, re.IGNORECASE)
         target = m.group(1).strip() if m else "유망 기업"
-        headline = f"사업 시너지 강화를 위한 [{target[:22]}] 인수합병 단행"
-        lines = [
-            "• **핵심 팩트:** 신규 성장 동력 확보를 위해 핵심 지분 인수 및 사업 합병 계약을 정식 체결했습니다.",
-            "• **실적/주가 영향:** 피인수 기업의 고객망과 기술이 연결되어 분기 연결 실적에 즉각적인 외형 확장이 반영됩니다."
+        headline = f"🤝 덩치 키우기: [{target[:20]}] 기업 전격 인수!"
+        explains = [
+            "• **무슨 일인가요?** 회사가 시장에서 경쟁력을 높이기 위해 다른 유망한 회사를 사들이는 M&A(인수합병, 다른 기업의 지분을 사들여 내 식구로 만드는 것) 계약을 공식 체결했습니다.",
+            "• **쉽게 이해하기:** 새로운 시장에 맨땅에 헤딩하며 들어가는 대신, 이미 잘나가는 업체를 통째로 흡수한 것입니다. 그 회사가 갖고 있던 고객 명단과 기술이 즉시 합산되어 연결 재무제표(자회사 실적까지 합친 회계 장부)에 매출이 크게 불어납니다."
         ]
-        action = "💡 오늘 체크포인트: 인수 대금 조달 조건(현금/증자)에 따른 주가 희석 여부 및 장기 마진율 추이 관찰"
-        return "🤝 M&A 체결", 9, headline, lines, action
+        action = "💡 오늘 이렇게 보세요: 회사를 인수하느라 무리하게 빚을 냈는지, 아니면 유상증자(주식을 새로 찍어내 주주 돈을 빌려 주당 가치를 떨어뜨리는 일) 없이 회사 금고의 현금으로 알뜰하게 잘 샀는지 조건을 살피는 것이 핵심입니다."
+        return "🤝 회사 인수합병", 9, headline, explains, action
 
-    # 5. 대형 수주 / 계약
+    # 5. 대형 수주 / 공급 계약
     if any(k in combo for k in ["contract", "awarded", "supply agreement", "order"]):
-        headline = "글로벌 고객사 대상 대규모 공급 수주 계약 체결"
-        lines = [
-            "• **핵심 팩트:** 정부 기관 또는 대기업과의 장기 제품/솔루션 공급 계약이 확정되었습니다.",
-            "• **실적/주가 영향:** 수주 잔고가 대폭 증가하여 향후 1~2년간 안정적인 실적 가시성을 확보했습니다."
+        headline = "💰 대형 고객사로부터 대규모 납품 계약 따냈다!"
+        explains = [
+            "• **무슨 일인가요?** 대기업이나 정부 기관에 대량으로 물건이나 서비스를 공급하기로 정식 수주(제품 공급 주문을 따내는 것) 계약 도장을 찍었습니다.",
+            "• **쉽게 이해하기:** 장사하는 사람 입장에서 '앞으로 몇 년 동안 꾸준히 팔릴 대형 일감'을 미리 확보한 것과 같습니다. 수주 잔고(앞으로 납품해서 돈으로 바뀔 계약 일감 총액)가 쌓여 실적이 꺾일 걱정이 사라지므로 주가에 든든한 바닥이 형성됩니다."
         ]
-        action = "💡 오늘 체크포인트: 수주 금액의 연간 매출 대비 비중 파악 및 실적 발표 시 영업이익률 반영 확인"
-        return "💰 대형 수주", 8, headline, lines, action
+        action = "💡 오늘 이렇게 보세요: 이번 계약 금액이 이 회사 한 해 전체 매출액(1년간 벌어들인 총금액)의 몇 %를 차지할 정도로 거대한 규모인지 확인하면 주가가 얼마나 강하게 반응할지 가늠할 수 있습니다."
+        return "💰 대형 계약 수주", 8, headline, explains, action
 
     # 6. 실적 호재 / 서프라이즈
     if any(k in combo for k in ["guidance", "beats", "earnings surprise", "record revenue", "quarter results"]):
-        headline = "시장 컨센서스 상회 호실적 및 연간 가이던스 상향"
-        lines = [
-            "• **핵심 팩트:** 분기 매출과 영업이익이 월가 예상치를 크게 웃돌았으며, 경영진이 향후 목표치를 상향했습니다.",
-            "• **실적/주가 영향:** 탄탄한 본업 이익 체력이 입증되며 기관들의 목표가 상향과 매수세가 이어집니다."
+        headline = "📈 어닝 서프라이즈: 예상보다 돈을 훨씬 더 많이 벌었다!"
+        explains = [
+            "• **무슨 일인가요?** 지난 분기에 회사가 실제로 벌어들인 돈이 컨센서스(시장 증권사 전문가들의 평균 예상치)를 훌쩍 뛰어넘는 어닝 서프라이즈(깜짝 호실적)를 기록했습니다. 심지어 회사 경영진이 가이던스(기업이 스스로 밝힌 앞으로 벌 돈 목표치)까지 상향 조정했습니다.",
+            "• **쉽게 이해하기:** 말만 번지르르한 게 아니라 통장에 찍힌 진짜 영업이익(본업 장사로 순수하게 남긴 알짜 이익)으로 실력을 증명했습니다. 주식 시장에서 기관 투자자들의 자금이 가장 안심하고 들어오는 최고의 호재입니다."
         ]
-        action = "💡 오늘 체크포인트: 실적 발표 후 컨퍼런스콜 세부 코멘트(수주 잔고, 마진 가이던스) 체크"
-        return "📈 실적 서프라이즈", 8, headline, lines, action
+        action = "💡 오늘 이렇게 보세요: 실적이 좋으면 기관(펀드 매니저)들이 며칠에 걸쳐 꾸준히 사 모으기 때문에 냄비처럼 하루 만에 식지 않고 안정적으로 우상향(주가가 계단식으로 오르는 흐름)하는지 관찰하세요."
+        return "📈 깜짝 실적 호재", 8, headline, explains, action
 
     # 7. 금리 / 연준 (매크로)
     if any(k in combo for k in ["fed", "interest rate", "rate cut", "rate hike", "inflation", "cpi", "powell"]):
-        headline = "미 연준 기준금리 정책 및 주요 물가 지표 발표"
-        lines = [
-            "• **핵심 팩트:** 파월 의장의 통화정책 발언 및 CPI 지표가 발표되며 향후 금리 인하 속도에 시장 관심이 집중되었습니다.",
-            "• **실적/주가 영향:** 국채 금리와 달러 인덱스가 출렁이며 나스닥 고성장 기술주의 밸류에이션에 직접적 영향을 미칩니다."
+        headline = "🏦 미국 중앙은행(연준) 금리 및 물가 소식"
+        explains = [
+            "• **무슨 일인가요?** 미국 기준금리(중앙은행이 정하는 돈의 기본 이자율)를 결정하는 Fed(연준, 미국의 중앙은행) 파월 의장의 발언이나 CPI(소비자물가지수, 물가가 얼마나 올랐는지 보는 지표)가 발표되었습니다.",
+            "• **쉽게 이해하기:** 금리는 '돈의 가격'입니다. 금리를 내리면 은행 예금 대신 주식 시장으로 돈이 몰리고 기업들의 대출 이자 부담이 줄어들어 주가가 오르지만, 금리를 내리지 않고 버티면 부채(빚)가 많은 기술 성장주들은 주가가 짓눌리게 됩니다."
         ]
-        action = "💡 오늘 체크포인트: 10년물 미국채 금리 추이 및 나스닥 지수 선물 변동성 실시간 점검"
-        return "🏦 금리/매크로", 9, headline, lines, action
+        action = "💡 오늘 이렇게 보세요: 개별 주식의 잘못이 아니라 시장 전체가 출렁이는 매크로(거시 경제 환경) 이슈이므로, 나스닥 지수 선물이 안정되는지 먼저 확인하고 매매하세요."
+        return "🏦 금리/물가 이슈", 9, headline, explains, action
 
     # 8. 유가 / 원유 (매크로)
     if any(k in combo for k in ["oil", "crude", "opec", "energy", "gas"]):
-        headline = "국제 유가 변동 및 원유 공급망 이슈"
-        lines = [
-            "• **핵심 팩트:** OPEC 생산 정책 및 지정학적 불안으로 국제 유가(WTI/브렌트유)가 급변동하고 있습니다.",
-            "• **실적/주가 영향:** 유가 상승 시 물류/원가 부담으로 일반 제조업에 부담이나, 정유·에너지 기업 주가에는 호재로 작용합니다."
+        headline = "🛢️ 기름값(국제 유가) 요동: 내 주식엔 어떤 영향이?"
+        explains = [
+            "• **무슨 일인가요?** 중동 분쟁이나 OPEC(석유수출국기구, 산유국 모임)의 원유 감산(기름 생산량을 줄이는 것) 정책으로 국제 유가가 출렁이고 있습니다.",
+            "• **쉽게 이해하기:** 기름값이 오르면 공장 가동 비용, 항공유, 화물 운송비가 전부 올라 인플레이션(물가가 전반적으로 치솟는 현상)을 다시 자극합니다. 일반 기업들에게는 비용 부담이지만, 원유를 직접 캐서 파는 정유/에너지 주식에는 호재가 됩니다."
         ]
-        action = "💡 오늘 체크포인트: 에너지 섹터 ETF(XLE) 수급 및 인플레이션 재점화 우려 여부 모니터링"
-        return "🛢️ 유가/에너지", 8, headline, lines, action
+        action = "💡 오늘 이렇게 보세요: 항공주나 일반 제조업 주식은 잠시 숨고르기에 들어갈 수 있고, 에너지 섹터(관련 업종 주식 묶음) 쪽으로 매수세가 쏠리는지 확인하세요."
+        return "🛢️ 유가/기름값", 8, headline, explains, action
 
     # 9. 암호화폐 / 비트코인
     if any(k in combo for k in ["bitcoin", "crypto", "ethereum", "btc"]):
-        headline = "비트코인 등 가상자산 시세 변동 및 규제 동향"
-        lines = [
-            "• **핵심 팩트:** 현물 ETF 자금 유출입 및 기관 매수세에 따라 비트코인 시세가 강한 변동성을 보이고 있습니다.",
-            "• **실적/주가 영향:** 가상자산 관련주(MSTR, COIN 등)와 핀테크 섹터의 동반 주가 급등락이 연출됩니다."
+        headline = "🪙 비트코인 급등락: 코인 관련 주식도 함께 흔들린다"
+        explains = [
+            "• **무슨 일인가요?** 비트코인 시세가 급격히 움직이거나 현물 ETF(거래소에 상장되어 주식처럼 사고파는 펀드) 자금 유출입 소식이 전해졌습니다.",
+            "• **쉽게 이해하기:** 비트코인을 회사 금고에 잔뜩 사 모아둔 기업이나 코인 거래소 주식들은 가상자산 시세와 커플링(두 자산의 가격이 똑같이 연동되어 움직이는 현상)됩니다. 코인이 오르면 이들 주가도 함께 폭발합니다."
         ]
-        action = "💡 오늘 체크포인트: 암호화폐 관련주 프리마켓 갭상승 폭 및 비트코인 주요 지지선 유지 여부 확인"
-        return "🪙 크립토", 8, headline, lines, action
+        action = "💡 오늘 이렇게 보세요: 변동성(주가가 위아래로 출렁이는 폭)이 매우 크기 때문에 무리하게 추격매수(오르는 주식을 급하게 따라 사는 것)하지 마시고 비트코인이 주요 지지선을 지켜주는지 먼저 확인하세요."
+        return "🪙 코인/비트코인", 8, headline, explains, action
 
-    # 기본 기사
+    # 기본 소식
     clean_title = title.replace(" - Yahoo Finance", "").replace("Yahoo Finance", "")
-    headline = f"주요 사업 진행 상황 및 시장 동향 업데이트"
-    lines = [
-        f"• **핵심 팩트:** {clean_title[:55]} 관련 소식이 전해졌습니다.",
-        "• **실적/주가 영향:** 단기적인 급변동 요인보다는 기업의 중장기 사업 체질 개선 및 시장 거래 흐름에 따른 변동입니다."
+    headline = "📢 회사 주요 경영 업데이트 및 시장 소식"
+    explains = [
+        f"• **무슨 일인가요?** {clean_title[:55]} 관련 뉴스가 전해졌습니다.",
+        "• **쉽게 이해하기:** 오늘 당장 주가가 폭등하는 급등 재료라기보다는, 회사가 사업을 진행하면서 시장에 소식을 알리는 정규 공시(기업의 주요 내용을 투자자에게 공식 발표하는 것)입니다. 기업의 기초 체력을 확인하는 용도로 읽으시면 좋습니다."
     ]
-    action = "💡 오늘 체크포인트: 거래량 증가 추이 및 주요 이동평균선 지지 여부 관찰"
-    return "📢 기업 소식", 6, headline, lines, action
+    action = "💡 오늘 이렇게 보세요: 평소 거래량(주식이 사고팔린 수량)보다 갑자기 2~3배 이상 많은 거래가 터지는지 호가창을 가볍게 체크해 보세요."
+    return "📢 기업 소식", 6, headline, explains, action
 
 def star_render(stars):
     full = "★" * stars
     empty = "☆" * (10 - stars)
     return f"{full}{empty} ({stars}/10점)"
 
-def fetch_all_market_news():
+def fetch_24h_market_news():
     now_kst = datetime.now(timezone(timedelta(hours=9)))
     
     rss_urls = [
@@ -315,13 +315,13 @@ def fetch_all_market_news():
         title = entry.title
         summary_raw = getattr(entry, 'summary', '')
         
+        # 24시간(1일 = 86,400초) 초과 과거 뉴스는 자동 배제
         if hasattr(entry, 'published_parsed') and entry.published_parsed:
             dt_utc = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
             dt_kst = dt_utc.astimezone(timezone(timedelta(hours=9)))
             total_seconds = (now_kst - dt_kst).total_seconds()
             
-            # 3일(72시간) 초과 과거 뉴스 자동 배제
-            if total_seconds > 259200:
+            if total_seconds > 86400:
                 continue
                 
             diff_hours = int(total_seconds // 3600)
@@ -330,20 +330,18 @@ def fetch_all_market_news():
             
             if diff_hours == 0:
                 time_ago = f"{max(1, diff_mins)}분 전"
-            elif diff_hours < 24:
-                time_ago = f"{diff_hours}시간 전"
             else:
-                time_ago = f"{diff_hours // 24}일 전"
+                time_ago = f"{diff_hours}시간 전"
                 
-            pub_str = f"{dt_kst.strftime('%m/%d %H:%M')} ({time_ago})"
+            pub_str = f"{dt_kst.strftime('%H:%M')} ({time_ago})"
         else:
             timestamp_val = now_kst.timestamp()
             pub_str = "방금 전"
             
         ticker = extract_ticker(title)
-        category, stars, headline_kor, summary_lines, action_guide = make_executive_briefing(title, summary_raw)
+        category, stars, headline_kor, explains_list, action_guide = make_easy_story_briefing(title, summary_raw)
         
-        if any(cat_key in category for cat_key in ["금리", "유가", "크립토"]):
+        if any(cat_key in category for cat_key in ["금리", "유가", "코인"]):
             ticker = "MACRO"
             
         news_items.append({
@@ -353,7 +351,7 @@ def fetch_all_market_news():
             "category": category,
             "stars": stars,
             "headline": headline_kor,
-            "summary": summary_lines,
+            "explains": explains_list,
             "action": action_guide,
             "original_title": title,
             "link": entry.link
@@ -364,43 +362,42 @@ def fetch_all_market_news():
 
 @st.fragment(run_every="60s" if auto_refresh else None)
 def render_news_dashboard():
-    news_list = fetch_all_market_news()
+    news_list = fetch_24h_market_news()
     
     if news_list:
-        st.write(f"⏱️ **실시간 브리핑:** 최근 3일 이내 핵심 이슈 {len(news_list)}건 (최신순)")
+        st.write(f"⏱️ **실시간 브리핑 현황:** 최근 24시간(1일) 이내 발생한 핵심 소식 **{len(news_list)}건** 감지 (최신순)")
         
         for item in news_list:
             t = item["ticker"]
             
             if t == "MACRO" or not t:
                 ticker_badge = '<span class="badge-macro">🌍 글로벌 매크로</span>'
-                scout_text = "시장 지수 / 섹터 전반 영향"
+                scout_text = "시장 전체 지수 / 섹터 분위기에 영향"
             else:
                 prof = get_stock_profile(t)
                 if prof:
                     ticker_badge = f'<span class="badge-stock">🔍 {t} ({prof["name"][:10]})</span>'
-                    scout_text = f"CA {prof['ca']} / PA {prof['pa']} (+{prof['gap']} 포텐) | 도달: {prof['eta']}"
+                    scout_text = f"실력(CA) {prof['ca']} / 잠재력(PA) {prof['pa']} (+{prof['gap']}점 여유) | 예상: {prof['eta']}"
                 else:
                     ticker_badge = f'<span class="badge-stock">🔍 {t}</span>'
-                    scout_text = "개별 종목 수급 집중"
+                    scout_text = "개별 종목에 관심 집중"
                     
             stars_text = star_render(item["stars"])
             
-            # 유튜브 AI 비서 스타일 카드 렌더링
             card_html = f"""
             <div class="briefing-card">
                 <div class="card-header">
                     {ticker_badge}
                     <span class="badge-cat">{item['category']}</span>
                     <span class="badge-time">🕒 {item['time']}</span>
-                    <span class="badge-scout">📊 비서 스카우팅: {scout_text}</span>
+                    <span class="badge-scout">📊 비서 진단: {scout_text}</span>
                     <span class="star-rating">{stars_text}</span>
                 </div>
                 <div class="headline-text">
-                    📢 {item['headline']}
+                    {item['headline']}
                 </div>
-                <div class="briefing-box">
-                    {'<br>'.join(item['summary'])}
+                <div class="explain-box">
+                    {'<br><br>'.join(item['explains'])}
                 </div>
                 <div class="action-box">
                     {item['action']}
@@ -409,10 +406,10 @@ def render_news_dashboard():
             """
             st.markdown(card_html, unsafe_allow_html=True)
             
-            with st.expander(f"📄 원문 헤드라인 및 기사 링크"):
-                st.write(f"**원문:** {item['original_title']}")
-                st.markdown(f"[🔗 야후 파이낸스 기사 보기]({item['link']})")
+            with st.expander(f"📄 현지 영문 원문 기사 확인"):
+                st.write(f"**원문 제목:** {item['original_title']}")
+                st.markdown(f"[🔗 야후 파이낸스 기사 전문 보기]({item['link']})")
     else:
-        st.info("현재 시장 뉴스를 모니터링 중입니다. 잠시 후 자동으로 갱신됩니다.")
+        st.info("현재 24시간 이내의 실시간 속보를 확인 중입니다. 잠시 후 자동으로 갱신됩니다.")
 
 render_news_dashboard()
