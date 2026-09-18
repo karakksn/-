@@ -9,73 +9,58 @@ import re
 
 st.set_page_config(page_title="Market Catalyst Pro - 실시간 호재 레이더", layout="wide")
 
-# 직관적인 카드 및 툴팁 CSS
+# 스타일 시트
 st.markdown(
     """
     <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
     
-    /* 뉴스 카드 메인 스타일 */
     .catalyst-card {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
         padding: 16px 20px;
-        margin-bottom: 14px;
+        margin-bottom: 12px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        transition: all 0.2s ease-in-out;
-    }
-    .catalyst-card:hover {
-        border-color: #3b82f6;
-        box-shadow: 0 8px 12px -2px rgba(59, 130, 246, 0.12);
     }
     
-    /* 뱃지 스타일 */
     .badge {
         display: inline-block;
-        padding: 3px 10px;
+        padding: 4px 10px;
         font-size: 12px;
         font-weight: 700;
         border-radius: 6px;
         margin-right: 6px;
     }
-    .badge-ticker {
-        background-color: #1e293b;
-        color: #ffffff;
-        font-size: 14px;
-        cursor: pointer;
-        position: relative;
-    }
+    .badge-ticker { background-color: #0f172a; color: #ffffff; font-size: 13px; }
     .badge-cat { background-color: #dbeafe; color: #1d4ed8; }
     .badge-time { background-color: #fef3c7; color: #b45309; }
     .badge-effect { background-color: #dcfce7; color: #15803d; }
     
-    /* 호버 툴팁 스타일 */
-    .tooltip-box {
+    .tooltip-container {
         position: relative;
         display: inline-block;
         cursor: pointer;
     }
-    .tooltip-box .tooltip-text {
+    .tooltip-container .tooltip-card {
         visibility: hidden;
-        width: 240px;
+        width: 250px;
         background-color: #0f172a;
-        color: #ffffff;
-        text-align: left;
+        color: #f8fafc;
         border-radius: 8px;
-        padding: 10px 12px;
+        padding: 10px 14px;
         position: absolute;
-        z-index: 50;
+        z-index: 100;
         bottom: 125%;
         left: 50%;
         transform: translateX(-50%);
         opacity: 0;
-        transition: opacity 0.25s;
+        transition: opacity 0.2s;
         font-size: 12px;
+        line-height: 1.6;
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-        line-height: 1.5;
     }
-    .tooltip-box .tooltip-text::after {
+    .tooltip-container .tooltip-card::after {
         content: "";
         position: absolute;
         top: 100%;
@@ -85,7 +70,7 @@ st.markdown(
         border-style: solid;
         border-color: #0f172a transparent transparent transparent;
     }
-    .tooltip-box:hover .tooltip-text {
+    .tooltip-container:hover .tooltip-card {
         visibility: visible;
         opacity: 1;
     }
@@ -95,7 +80,7 @@ st.markdown(
 )
 
 st.title("🔥 오늘의 실시간 호재 촉매 레이더")
-st.caption("오늘 시장에서 즉시 주시해야 할 핵심 종목과 호재 내용, 적용 시점을 한눈에 확인하세요. (종목에 마우스를 올리면 잠재력이 표시됩니다)")
+st.caption("가장 최근에 보도된 실시간 기사 순으로 정렬됩니다. (종목명에 마우스를 올리면 잠재력 스탯이 뜹니다)")
 
 st.sidebar.header("📡 스카우트 설정")
 market_choice = st.sidebar.selectbox(
@@ -112,7 +97,6 @@ scan_limit = st.sidebar.slider("스캔 종목 수", min_value=10, max_value=30, 
 def clamp(val, min_val=1, max_val=200):
     return int(max(min_val, min(val, max_val)))
 
-# 트레이딩뷰 실시간 티커 추출
 def fetch_tradingview_tickers(choice, limit):
     try:
         if choice == "🔥 오늘 실시간 뉴스 호재/급등 촉매주":
@@ -160,7 +144,6 @@ def fetch_tradingview_tickers(choice, limit):
 
 ticker_list = fetch_tradingview_tickers(market_choice, scan_limit)
 
-# 펀더멘털 및 CA/PA 연산 (간소화)
 @st.cache_data(ttl=1800)
 def get_stock_profile(ticker):
     try:
@@ -181,7 +164,6 @@ def get_stock_profile(ticker):
         
         return {
             "name": name,
-            "price": cur_p,
             "ca": ca,
             "pa": pa,
             "gap": gap,
@@ -198,76 +180,66 @@ def get_stock_profile(ticker):
         }
     except Exception:
         return {
-            "name": ticker, "price": 0, "ca": 100, "pa": 120, "gap": 20,
+            "name": ticker, "ca": 100, "pa": 120, "gap": 20,
             "eta": "분석 대기", "verdict": "모니터링 대상",
             "stats": {"수익성": 100, "영업이익률": 100, "매출성장": 100, "이익성장": 100, "현재 능력치": 100, "잠재력 한계": 120}
         }
 
-# 영문 헤드라인을 간결하고 명확한 한글 문장으로 요약 번역
 def summarize_to_korean(title):
     t_lower = title.lower()
-    
-    # 주요 호재 패턴별 한글 번역
     if any(k in t_lower for k in ["acquisition", "acquires", "acquire", "merger"]):
         m = re.search(r"to acquire (.+)", title, re.IGNORECASE)
-        target = m.group(1) if m else "유망 기업"
-        return f"🤝 대규모 인수합병(M&A) 단행: {target[:30]} 인수 계약 체결", "인수합병 (M&A)"
-        
+        target = m.group(1) if m else "기업"
+        return f"🤝 대규모 인수합병(M&A) 단행: {target[:25]} 지분 인수 체결", "인수합병 (M&A)"
     elif any(k in t_lower for k in ["partnership", "partner", "collaborat"]):
-        return "🤝 전략적 사업 파트너십 체결 및 글로벌 시장 공동 확장", "전략적 파트너십"
-        
+        return "🤝 전략적 사업 파트너십 체결 및 시장 공동 확장", "전략적 파트너십"
     elif any(k in t_lower for k in ["contract", "secures", "awarded", "order"]):
-        return "💰 대규모 공급 수주 계약 확보 (신규 매출 가시화)", "대형 수주/계약"
-        
+        return "💰 대규모 공급 수주 계약 체결 (실적 직결)", "대형 수주/계약"
     elif any(k in t_lower for k in ["fda", "approval", "cleared", "trial", "phase"]):
-        return "🧬 신약/의료기기 규제 당국 승인 완료 및 임상 진전", "FDA/신약 허가"
-        
+        return "🧬 신약/의료기기 규제 당국 승인 및 임상 통과", "FDA/신약 승인"
     elif any(k in t_lower for k in ["earnings", "revenue", "quarter", "results", "guidance"]):
         if any(k in t_lower for k in ["record", "beat", "strong", "jump", "surge", "raises"]):
-            return "📈 시장 예상치를 웃돈 어닝 서프라이즈 및 가이던스 상향 발표", "실적 호재"
-        return "📊 분기 실적 발표 및 사업 포트폴리오 업데이트 공시", "실적 발표"
-        
+            return "📈 시장 전망치 상회 어닝 서프라이즈 및 가이던스 상향", "실적 호재"
+        return "📊 분기 실적 발표 및 주요 경영 성과 공시", "실적 발표"
     elif any(k in t_lower for k in ["ai", "nvidia", "chip", "patent"]):
-        return "🤖 차세대 AI 인프라 도입 및 핵심 기술 특허 취득", "AI/신기술 확보"
-        
-    elif any(k in t_lower for k in ["shares rally", "jump", "surge", "gain"]):
-        return "🚀 장중 매수세 집중으로 주가 모멘텀 급등세 분출", "주가 급등 모멘텀"
-        
+        return "🤖 차세대 AI 인프라 도입 및 핵심 기술 특허 확보", "AI/신기술 확보"
     else:
-        # 일반 뉴스 요약
-        return f"📢 주요 비즈니스 및 시장 동향 업데이트 ({title[:40]}...)", "비즈니스 뉴스"
+        return f"📢 주요 비즈니스 및 시장 동향 업데이트", "비즈니스 뉴스"
 
-# 최신 뉴스 피드 수집
 def fetch_top_catalysts(tickers):
     news_items = []
+    now_kst = datetime.now(timezone(timedelta(hours=9)))
+    
     for t in tickers:
         try:
             feed = feedparser.parse(f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={t}&region=US&lang=en-US")
             if not feed.entries:
                 continue
-            entry = feed.entries[0] # 가장 최신 기사 1개
+            entry = feed.entries[0]
             
-            # 시간 계산 (KST)
             if hasattr(entry, 'published_parsed') and entry.published_parsed:
                 dt_utc = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
                 dt_kst = dt_utc.astimezone(timezone(timedelta(hours=9)))
-                diff_hours = int((datetime.now(timezone(timedelta(hours=9))) - dt_kst).total_seconds() // 3600)
+                diff_hours = int((now_kst - dt_kst).total_seconds() // 3600)
+                timestamp_val = dt_kst.timestamp()
                 pub_str = f"{dt_kst.strftime('%m/%d %H:%M')} ({diff_hours}시간 전)"
                 
                 if diff_hours <= 8:
-                    effect_str = "⚡ 오늘 정규장 즉각 반영 중 (핵심 주시)"
+                    effect_str = "⚡ 오늘 정규장 즉각 반영 중"
                 elif diff_hours <= 24:
                     effect_str = "📈 단기 시세 추세 지속 반영"
                 else:
                     effect_str = "⏳ 기본 가치 선반영 단계"
             else:
-                pub_str = "오늘"
-                effect_str = "⚡ 실시간 시장 거래 반영"
+                timestamp_val = 0
+                pub_str = "최근 24시간 이내"
+                effect_str = "⚡ 시장 실시간 반영"
                 
             kor_summary, category = summarize_to_korean(entry.title)
             
             news_items.append({
                 "ticker": t,
+                "timestamp": timestamp_val,
                 "category": category,
                 "summary": kor_summary,
                 "original_title": entry.title,
@@ -277,65 +249,55 @@ def fetch_top_catalysts(tickers):
             })
         except Exception:
             continue
+            
+    # 최신 뉴스(타임스탬프 큰 순) 기준 최상단 정렬
+    news_items.sort(key=lambda x: x["timestamp"], reverse=True)
     return news_items
 
-# --- 화면 렌더링 ---
-with st.spinner("오늘 장 최신 호재 뉴스와 종목 잠재력을 분석하는 중..."):
+with st.spinner("최신 호재 뉴스를 수집하고 시간순으로 정렬하는 중..."):
     catalyst_list = fetch_top_catalysts(ticker_list)
 
 if catalyst_list:
-    st.markdown("### 🔔 오늘 장 최우선 주시 종목 리스트")
-    st.caption("각 종목에 마우스를 올리면 잠재력(CA/PA)이 바로 뜹니다. 카드를 눌러 상세 내용을 확인하세요.")
+    st.markdown("### 🔔 오늘 장 최우선 주시 종목 리스트 (최신 뉴스순)")
     
     for item in catalyst_list:
         t = item["ticker"]
         prof = get_stock_profile(t)
         
-        # 종목 호버 툴팁 HTML
-        tooltip_html = f"""
-        <div class="tooltip-box">
-            <span class="badge badge-ticker">🔍 {t} ({prof['name'][:10]})</span>
-            <div class="tooltip-text">
-                <b>📊 {t} 잠재력 스카우팅</b><br>
-                • 현재 실력(CA): <b>{prof['ca']}</b> / 200<br>
-                • 잠재 능력(PA): <b>{prof['pa']}</b> / 200<br>
-                • 포텐 여유: <b>+{prof['gap']}</b> Poten<br>
-                • 도달 예상: {prof['eta']}<br>
-                • 스카우트: {prof['verdict']}
-            </div>
-        </div>
-        """
-        
-        # 메인 카드 렌더링
-        st.markdown(
-            f"""
-            <div class="catalyst-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <div>
-                        {tooltip_html}
-                        <span class="badge badge-cat">{item['category']}</span>
-                        <span class="badge badge-time">🕒 {item['time']}</span>
-                    </div>
-                    <div>
-                        <span class="badge badge-effect">{item['effect']}</span>
-                    </div>
-                </div>
-                <div style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 8px 0;">
-                    {item['summary']}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
+        # HTML 태그 깨짐을 방지하기 위해 공백 없는 단일 문자열로 조립
+        card_html = (
+            f'<div class="catalyst-card">'
+            f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">'
+            f'<div>'
+            f'<div class="tooltip-container">'
+            f'<span class="badge badge-ticker">🔍 {t} ({prof["name"][:10]})</span>'
+            f'<div class="tooltip-card">'
+            f'<b>📊 {t} 잠재력 스카우팅</b><br>'
+            f'• 현재 실력(CA): <b>{prof["ca"]}</b> / 200<br>'
+            f'• 잠재 능력(PA): <b>{prof["pa"]}</b> / 200<br>'
+            f'• 포텐 여유: <b>+{prof["gap"]}</b> Poten<br>'
+            f'• 도달 예상: {prof["eta"]}<br>'
+            f'• 스카우트: {prof["verdict"]}'
+            f'</div>'
+            f'</div>'
+            f'<span class="badge badge-cat">{item["category"]}</span>'
+            f'<span class="badge badge-time">🕒 {item["time"]}</span>'
+            f'</div>'
+            f'<div><span class="badge badge-effect">{item["effect"]}</span></div>'
+            f'</div>'
+            f'<div style="font-size:15px; font-weight:700; color:#0f172a; margin:8px 0;">'
+            f'{item["summary"]}'
+            f'</div>'
+            f'</div>'
         )
+        st.markdown(card_html, unsafe_allow_html=True)
         
-        # 클릭 시 펼쳐지는 상세 원문
-        with st.expander(f"📄 {t} 원문 헤드라인 및 세부 기사 링크 보기"):
+        with st.expander(f"📄 {t} 원문 헤드라인 및 세부 기사 링크"):
             st.write(f"**영문 원문:** {item['original_title']}")
             st.markdown(f"[🔗 야후 파이낸스 원문 기사 바로가기]({item['link']})")
 
     st.divider()
 
-    # 하단 탭: 개별 세부 차트 및 전체 순위 테이블
     tab1, tab2 = st.tabs(["📊 선택 종목 육각형 레이더 차트", "📋 전체 스카우팅 랭킹 표"])
     
     with tab1:
@@ -385,6 +347,7 @@ if catalyst_list:
                 "티커": c["ticker"],
                 "기업명": p["name"],
                 "호재 분류": c["category"],
+                "보도 일시": c["time"],
                 "CA": p["ca"],
                 "PA": p["pa"],
                 "포텐": f"+{p['gap']}",
