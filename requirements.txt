@@ -1,6 +1,8 @@
 streamlit
 yfinance
-pandas
-plotly
 tradingview-screener
 feedparser
+plotly
+pandas
+beautifulsoup4
+requests
